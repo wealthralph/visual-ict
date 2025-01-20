@@ -14,111 +14,221 @@ import {
   Modal,
   ActionIcon,
   Badge,
+  Loader,
+  TextInput,
+  NumberInput,
 } from "@mantine/core";
 import "./App.css";
 import { useState } from "react";
 import PropTypes from "prop-types";
 import { Dropzone, MIME_TYPES } from "@mantine/dropzone";
-import { IconFileTypeCsv, IconTrash, IconUpload, IconX } from "@tabler/icons-react";
+import {
+  IconFileTypeCsv,
+  IconPlus,
+  IconTrash,
+  IconUpload,
+  IconX,
+} from "@tabler/icons-react";
 import Papa from "papaparse";
 import { useDisclosure } from "@mantine/hooks";
-import axios from "axios"
+import axios from "axios";
+import { Controller, useFieldArray, useForm } from "react-hook-form";
+
+const axiosClient = axios.create({
+  baseURL: "https://core-api.tagpay.ng/v1/",
+  headers: {
+    Authorization: `Bearer ${import.meta.env.VITE_API_KEYS}`,
+  },
+  withCredentials: true,
+});
 
 function Single() {}
 
 function BulkModal({ opened, close }) {
+  const {
+    register,
+    control,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm({
+    defaultValues: {
+      activate: [{ accountNumber: "", pin: 0 }],
+    },
+    mode: "onChange",
+  });
+
+  const { fields, append, prepend, remove, swap, move, insert, replace } =
+    useFieldArray({
+      control,
+      name: "activate",
+      rules: {
+        minLength: 4,
+      },
+    });
+
+  console.log(fields, "fields");
+
   return (
-    <Modal opened={opened} onClose={close} title="Card Activation">
-      {/* Modal content */}
+    <Modal opened={opened} onClose={close} size={"md"} title={"Activate Card"} p={'xs'}>
+      <Stack align="center" w={'100%'}>
+        <Stack  w={'100%'}>
+          {fields.map((item, index) => (
+            <Flex key={item.id} gap={'xs'} w={'100%'}  >
+              <Controller
+                render={({ field }) => (
+                  <TextInput
+                    {...field}
+                    placeholder="Enter Account Number"
+                    // label="Account Number"
+                    required
+                    size="xs"
+                    radius={"sm"}
+                    data-autofocus
+                  />
+                )}
+                name={`activate.${index}.accountNumber`}
+                control={control}
+              />
+              <Controller
+                render={({ field }) => (
+                  <NumberInput
+                    {...field}
+                    placeholder="Enter Pin"
+                    // label="Pin"
+                    required
+                    size="xs"
+                    radius={"sm"}
+                  />
+                )}
+                name={`activate.${index}.pin`}
+                control={control}
+              />
+              <ActionIcon
+                variant="subtle"
+                color="red.5"
+                onClick={() => remove(index)}
+                title="Remove"
+                size={"md"}
+              >
+                <IconTrash size={18} />
+              </ActionIcon>
+            </Flex>
+          ))}
+        </Stack>
+        <ActionIcon
+          variant="default"
+          color="red"
+          onClick={append}
+          title="Remove"
+          size={"md"}
+        >
+          <IconPlus size={18} />
+        </ActionIcon>
+      </Stack>
     </Modal>
   );
 }
 
 function Bulk() {
   const [opened, { open, close }] = useDisclosure(false);
- const [tableData, setTableData] = useState([]);
- const [isProcessing, setIsProcessing] = useState(false)
- const [processingTableData, setProcessingTableData] = useState([]);
- const [fileName, setFileName] = useState(null);
+  const [tableData, setTableData] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [processingTableData, setProcessingTableData] = useState([]);
+  const [fileName, setFileName] = useState(null);
 
- const handleFileDrop = (files) => {
-   const file = files[0];
-   if (file) {
-     setFileName(file.name);
+  const handleFileDrop = (files) => {
+    const file = files[0];
+    if (file) {
+      setFileName(file.name);
 
-     const reader = new FileReader();
-     reader.onload = function (e) {
-       const csv = e.target.result;
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const csv = e.target.result;
 
-       // Parse CSV using PapaParse
-       Papa.parse(csv, {
-         header: true,
-         skipEmptyLines: true,
-         complete: function (result) {
-           const initialData = result.data.map((row, index) => ({
-             id: index,
-             ...row,
-             status: "idle",
-           }));
-           setTableData(initialData);
-          //  setProcessingTableData(initialData);
-         },
-       });
-     };
-     reader.readAsText(file);
-   }
- };
+        // Parse CSV using PapaParse
+        Papa.parse(csv, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function (result) {
+            const initialData = result.data.map((row, index) => ({
+              id: index,
+              ...row,
+              status: "pending",
+            }));
+            setTableData(initialData);
+            //  setProcessingTableData(initialData);
+          },
+        });
+      };
+      reader.readAsText(file);
+    }
+  };
 
- const clearFile = () => {
-   setFileName(null);
-   setTableData([]);
-   setProcessingTableData([]);
- };
+  const clearFile = () => {
+    setFileName(null);
+    setTableData([]);
+    setProcessingTableData([]);
+  };
 
-const handleSubmitBulk = async () => {
-  const updatedTableData = [...tableData.slice(0, 100)];
+  const handleSubmitBulk = async () => {
+    const updatedTableData = [...tableData.slice(0, 15)];
 
-  setIsProcessing(true)
-
-  for (let i = 0; i < updatedTableData.length; i++) {
-    const row = updatedTableData[i];
-    updatedTableData[i] = { ...row, status: "loading" };
-    setProcessingTableData([...updatedTableData]);
-
-      let timeoutId;
+    setIsProcessing(true);
 
 
-    try {
-       // Simulating API call with a delay
-      timeoutId = setTimeout(() => {
-        // Simulating API call with axios
-        // const response = await axios.post("/api/activate", row);
-        // if (response.status === 200) {
-        //   updatedTableData[i] = { ...row, status: "success" };
-        // } else {
-        //   updatedTableData[i] = { ...row, status: "failure" };
-        // }
+    for (let i = 0; i < updatedTableData.length; i++) {
+      const row = updatedTableData[i];
+      updatedTableData[i] = { ...row, status: "processing" };
+      setProcessingTableData([...updatedTableData]);
 
-        console.log(updatedTableData[i], "processing");
-        updatedTableData[i] = { ...row, status: "success" }; // Assuming success for simulation
-        setProcessingTableData([...updatedTableData]);
-      }, 3000);
+      const accountNumber = updatedTableData[i]?.accountNumber;
+      const pin = updatedTableData[i]?.pin;
 
-      await new Promise((resolve) => timeoutId);// Assuming success for simulation
-    } catch (error) {
-            clearTimeout(timeoutId);
+      try {
+        const retrieveIdResponse = await axiosClient.post(
+          `fip/card/${accountNumber}`
+        );
 
-      updatedTableData[i] = { ...row, status: "failure" };
+           console.log("@RETRIEVE ID RESPONSE STATUS", retrieveIdResponse.status);
+           console.log("@RETRIEVE ID RESPONSE DATA", retrieveIdResponse.data);
+
+        if (response.status === 200 || response.data.status === true) {
+          const payload = {
+            cardId: retrieveIdResponse.data?.data.id,
+            pin,
+          };
+
+          const changePinResponse = await axiosClient.post(
+            `fip/card/pin`,
+            JSON.stringify(payload)
+          );
+
+          console.log("@CHANGE PIN RESPONSE STATUS",changePinResponse.status)
+          console.log("@CHANGE PIN RESPONSE DATA",changePinResponse.data)
+
+          if (
+            changePinResponse.status === 200 ||
+            changePinResponse.data.status === true
+          ) {
+            updatedTableData[i] = { ...row, status: "success" };
+          }
+        }
+      } catch (error) {
+        updatedTableData[i] = { ...row, status: "failure" };
+      }
+
+      setProcessingTableData([...updatedTableData]);
     }
 
-    setProcessingTableData([...updatedTableData]);
-  }
+    setIsProcessing(false);
+  };
 
-  setIsProcessing(false)
-};
-
-
-const tableDataDisplay = isProcessing ? processingTableData : tableData
+  const tableDataDisplay =
+    isProcessing && processingTableData.length > 0
+      ? processingTableData
+      : tableData;
 
   return (
     <>
@@ -172,10 +282,12 @@ const tableDataDisplay = isProcessing ? processingTableData : tableData
             </Dropzone>
           ) : (
             <Box>
-              <Flex justify="space-between" align="center">
-                <Group gap={'xs'}>
+              <Flex justify="space-between" align="center" gap={"xl"}>
+                <Group gap={"xs"}>
                   <Text size="md">Selected File: </Text>
-                  <Badge radius={'sm'} variant="light" >{fileName}</Badge>
+                  <Badge radius={"sm"} variant="light">
+                    {fileName}
+                  </Badge>
                 </Group>
                 <Group>
                   <ActionIcon
@@ -187,7 +299,14 @@ const tableDataDisplay = isProcessing ? processingTableData : tableData
                   >
                     <IconTrash size={18} />
                   </ActionIcon>
-                  <Button size="xs" onClick={handleSubmitBulk}>Submit Bulk</Button>
+                  <Button
+                    size="xs"
+                    disabled={isProcessing}
+                    onClick={handleSubmitBulk}
+                    loading={isProcessing}
+                  >
+                    Submit Bulk
+                  </Button>
                 </Group>
               </Flex>
             </Box>
@@ -195,7 +314,7 @@ const tableDataDisplay = isProcessing ? processingTableData : tableData
 
           {!fileName && (
             <Box>
-              <Button onClick={open} >Upload Bulk Manually</Button>
+              <Button onClick={open}>Upload Bulk Manually</Button>
               <Input.Description my={"md"}>
                 Use this when you want to make a bulk activation manually
                 inputing multiple values
@@ -219,7 +338,7 @@ const tableDataDisplay = isProcessing ? processingTableData : tableData
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {tableDataDisplay.slice(0, 50).map((row, index) => (
+                {tableDataDisplay.slice(0, 15).map((row, index) => (
                   <Table.Tr key={index}>
                     {Object.values(row).map((value, idx) => (
                       <Table.Td key={idx}>{value}</Table.Td>
