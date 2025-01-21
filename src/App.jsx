@@ -36,21 +36,15 @@ import axios from "axios";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 
 const axiosClient = axios.create({
-  baseURL: "https://core-api.tagpay.ng/v1/",
-  headers: {
-    Authorization: `Bearer ${import.meta.env.VITE_API_KEYS}`,
-  },
-  withCredentials: true,
+  baseURL: "https://visual-ict-script.onrender.com",
 });
 
 function Single() {}
 
-function BulkModal({ opened, close, setTableData, onSubmit }) {
+function BulkModal({ opened, close, setTableData }) {
   const {
     control,
     handleSubmit,
-
-    formState: { errors },
   } = useForm({
     defaultValues: {
       activate: [{ accountNumber: "", pin: 0 }],
@@ -211,36 +205,20 @@ function Bulk() {
       const accountNumber = updatedTableData[i]?.accountNumber;
       const pin = updatedTableData[i]?.pin;
 
+      const payload = {
+        accountNumber,
+        pin
+      }
+
       try {
-        const retrieveIdResponse = await axiosClient.post(
-          `fip/card/${accountNumber}`
-        );
+        
+        const response = await axiosClient.get("/activate", payload)
 
-        console.log("@RETRIEVE ID RESPONSE STATUS", retrieveIdResponse.status);
-        console.log("@RETRIEVE ID RESPONSE DATA", retrieveIdResponse.data);
+        console.log(response.data, "response data")
+        console.log(response.status , 'response status ')
 
-        if (response.status === 200 || response.data.status === true) {
-          const payload = {
-            cardId: retrieveIdResponse.data?.data.id,
-            pin,
-          };
-
-          const changePinResponse = await axiosClient.post(
-            `fip/card/pin`,
-            JSON.stringify(payload)
-          );
-
-          console.log("@CHANGE PIN RESPONSE STATUS", changePinResponse.status);
-          console.log("@CHANGE PIN RESPONSE DATA", changePinResponse.data);
-
-          if (
-            changePinResponse.status === 200 ||
-            changePinResponse.data.status === true
-          ) {
-            updatedTableData[i] = { ...row, status: "success" };
-          }
-        }
       } catch (error) {
+        console.log(error)
         updatedTableData[i] = { ...row, status: "failure" };
       }
 
@@ -267,11 +245,11 @@ function Bulk() {
         setTableData={setTableData}
         onSubmit={handleManualSubmit}
       />
-      <Box>
-        <Stack>
+      <Box w={'100%'}>
+        <Stack w={'100%'}>
           {tableData.length > 0 ? (
-            <Box>
-              <Flex justify="space-between" align="center" gap={"xl"}>
+            <Box w={'100%'}>
+              <Flex justify="space-between" align="center" gap={"xl"} w={'100%'}>
                 {!fileName ? (
                   <Group gap={"xs"}>
                     <ActionIcon
