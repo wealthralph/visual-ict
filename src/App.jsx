@@ -19,10 +19,11 @@ import {
   NumberInput,
 } from "@mantine/core";
 import "./App.css";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Dropzone, MIME_TYPES } from "@mantine/dropzone";
 import {
+  IconEdit,
   IconFileTypeCsv,
   IconPlus,
   IconTrash,
@@ -44,13 +45,11 @@ const axiosClient = axios.create({
 
 function Single() {}
 
-function BulkModal({ opened, close }) {
+function BulkModal({ opened, close, setTableData, onSubmit }) {
   const {
-    register,
     control,
     handleSubmit,
-    reset,
-    watch,
+
     formState: { errors },
   } = useForm({
     defaultValues: {
@@ -59,74 +58,99 @@ function BulkModal({ opened, close }) {
     mode: "onChange",
   });
 
-  const { fields, append, prepend, remove, swap, move, insert, replace } =
-    useFieldArray({
-      control,
-      name: "activate",
-      rules: {
-        minLength: 4,
-      },
-    });
+  const { fields, append, remove, replace } = useFieldArray({
+    control,
+    name: "activate",
+    // rules: {
+    //   minLength: 4,
+    // },
+  });
 
-  console.log(fields, "fields");
+  const handleFormSubmit = (data) => {
+    console.log(data, "data from form submit");
+    if (data.activate) {
+      setTableData((prevData) => [...prevData,...data.activate]);
+    }
+    close();
+  };
+
+  useEffect(() => {
+      replace([{ accountNumber: "", pin: 0 }]);
+
+  },[])
 
   return (
-    <Modal opened={opened} onClose={close} size={"md"} title={"Activate Card"} p={'xs'}>
-      <Stack align="center" w={'100%'}>
-        <Stack  w={'100%'}>
-          {fields.map((item, index) => (
-            <Flex key={item.id} gap={'xs'} w={'100%'}  >
-              <Controller
-                render={({ field }) => (
-                  <TextInput
-                    {...field}
-                    placeholder="Enter Account Number"
-                    // label="Account Number"
-                    required
-                    size="xs"
-                    radius={"sm"}
-                    data-autofocus
-                  />
-                )}
-                name={`activate.${index}.accountNumber`}
-                control={control}
-              />
-              <Controller
-                render={({ field }) => (
-                  <NumberInput
-                    {...field}
-                    placeholder="Enter Pin"
-                    // label="Pin"
-                    required
-                    size="xs"
-                    radius={"sm"}
-                  />
-                )}
-                name={`activate.${index}.pin`}
-                control={control}
-              />
-              <ActionIcon
-                variant="subtle"
-                color="red.5"
-                onClick={() => remove(index)}
-                title="Remove"
-                size={"md"}
-              >
-                <IconTrash size={18} />
-              </ActionIcon>
-            </Flex>
-          ))}
+    <Modal
+      opened={opened}
+      onClose={close}
+      size={"md"}
+      title={"Activate Card"}
+      p={"xs"}
+    >
+      <form onSubmit={handleSubmit(handleFormSubmit)}>
+        <Stack align="center" w={"100%"}>
+          <Stack w={"100%"}>
+            {fields.map((item, index) => (
+              <Flex key={item.id} gap={"xs"} w={"100%"}>
+                <Controller
+                  rules={{ required: true }}
+                  render={({ field }) => (
+                    <TextInput
+                      {...field}
+                      placeholder="Enter Account Number"
+                      // label="Account Number"
+                      required
+                      size="xs"
+                      radius={"sm"}
+                      data-autofocus
+                    />
+                  )}
+                  name={`activate.${index}.accountNumber`}
+                  control={control}
+                />
+                <Controller
+                  render={({ field }) => (
+                    <NumberInput
+                      {...field}
+                      placeholder="Enter Pin"
+                      // label="Pin"
+                      required
+                      size="xs"
+                      radius={"sm"}
+                    />
+                  )}
+                  rules={{ required: true }}
+                  name={`activate.${index}.pin`}
+                  control={control}
+                />
+                <ActionIcon
+                  variant="subtle"
+                  color="red.5"
+                  onClick={() => remove(index)}
+                  title="Remove"
+                  size={"md"}
+                >
+                  <IconTrash size={18} />
+                </ActionIcon>
+              </Flex>
+            ))}
+          </Stack>
+          <Group>
+            <Button
+              size="xs"
+              onClick={() => append({ accountNumber: "", pin: " " })}
+              variant="default"
+              leftSection={<IconPlus size={16} />}
+              type="button"
+            >
+              Add fields
+            </Button>
+            <Button onClick={handleFormSubmit} size="xs" type="submit">
+              Submit
+            </Button>
+          </Group>
         </Stack>
-        <ActionIcon
-          variant="default"
-          color="red"
-          onClick={append}
-          title="Remove"
-          size={"md"}
-        >
-          <IconPlus size={18} />
-        </ActionIcon>
-      </Stack>
+      </form>
     </Modal>
   );
 }
@@ -137,6 +161,8 @@ function Bulk() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingTableData, setProcessingTableData] = useState([]);
   const [fileName, setFileName] = useState(null);
+
+  console.log(tableData, "this is the table data");
 
   const handleFileDrop = (files) => {
     const file = files[0];
@@ -177,7 +203,6 @@ function Bulk() {
 
     setIsProcessing(true);
 
-
     for (let i = 0; i < updatedTableData.length; i++) {
       const row = updatedTableData[i];
       updatedTableData[i] = { ...row, status: "processing" };
@@ -191,8 +216,8 @@ function Bulk() {
           `fip/card/${accountNumber}`
         );
 
-           console.log("@RETRIEVE ID RESPONSE STATUS", retrieveIdResponse.status);
-           console.log("@RETRIEVE ID RESPONSE DATA", retrieveIdResponse.data);
+        console.log("@RETRIEVE ID RESPONSE STATUS", retrieveIdResponse.status);
+        console.log("@RETRIEVE ID RESPONSE DATA", retrieveIdResponse.data);
 
         if (response.status === 200 || response.data.status === true) {
           const payload = {
@@ -205,8 +230,8 @@ function Bulk() {
             JSON.stringify(payload)
           );
 
-          console.log("@CHANGE PIN RESPONSE STATUS",changePinResponse.status)
-          console.log("@CHANGE PIN RESPONSE DATA",changePinResponse.data)
+          console.log("@CHANGE PIN RESPONSE STATUS", changePinResponse.status);
+          console.log("@CHANGE PIN RESPONSE DATA", changePinResponse.data);
 
           if (
             changePinResponse.status === 200 ||
@@ -225,6 +250,10 @@ function Bulk() {
     setIsProcessing(false);
   };
 
+  const handleManualSubmit = (data) => {
+    setTableData((prevData) => [...prevData, ...data]);
+  };
+
   const tableDataDisplay =
     isProcessing && processingTableData.length > 0
       ? processingTableData
@@ -232,10 +261,62 @@ function Bulk() {
 
   return (
     <>
-      <BulkModal opened={opened} close={close} />
+      <BulkModal
+        opened={opened}
+        close={close}
+        setTableData={setTableData}
+        onSubmit={handleManualSubmit}
+      />
       <Box>
         <Stack>
-          {!fileName ? (
+          {tableData.length > 0 ? (
+            <Box>
+              <Flex justify="space-between" align="center" gap={"xl"}>
+                {!fileName ? (
+                  <Group gap={"xs"}>
+                    <ActionIcon
+                      variant="light"
+                      color="gray"
+                      onClick={open}
+                      title="Clear file"
+                      disabled={isProcessing}
+                    >
+                      <IconEdit size={18} />
+                    </ActionIcon>
+                    <Text size="md">Edit Data </Text>
+                  </Group>
+                ) : (
+                  <Group gap={"xs"}>
+                    <Text size="md">Selected File: </Text>
+                    <Badge radius={"sm"} variant="light">
+                      {fileName}
+                    </Badge>
+                  </Group>
+                )}
+
+                <Group>
+                  <ActionIcon
+                    variant="light"
+                    color="red"
+                    onClick={clearFile}
+                    title="Clear file"
+                    disabled={isProcessing}
+                  >
+                    <IconTrash size={18} />
+                  </ActionIcon>
+                  <Button
+                    size="xs"
+                    disabled={isProcessing}
+                    onClick={handleSubmitBulk}
+                    loading={isProcessing}
+                  >
+                    Submit Bulk
+                  </Button>
+                </Group>
+              </Flex>
+            </Box>
+          ) : null}
+          {!tableData.length && (
             <Dropzone
               onDrop={handleFileDrop}
               onReject={(files) => console.log("Rejected files", files)}
@@ -280,44 +361,14 @@ function Bulk() {
                 </div>
               </Group>
             </Dropzone>
-          ) : (
-            <Box>
-              <Flex justify="space-between" align="center" gap={"xl"}>
-                <Group gap={"xs"}>
-                  <Text size="md">Selected File: </Text>
-                  <Badge radius={"sm"} variant="light">
-                    {fileName}
-                  </Badge>
-                </Group>
-                <Group>
-                  <ActionIcon
-                    variant="light"
-                    color="red"
-                    onClick={clearFile}
-                    title="Clear file"
-                    disabled={isProcessing}
-                  >
-                    <IconTrash size={18} />
-                  </ActionIcon>
-                  <Button
-                    size="xs"
-                    disabled={isProcessing}
-                    onClick={handleSubmitBulk}
-                    loading={isProcessing}
-                  >
-                    Submit Bulk
-                  </Button>
-                </Group>
-              </Flex>
-            </Box>
           )}
 
-          {!fileName && (
+          {!fileName && tableData.length === 0 && (
             <Box>
               <Button onClick={open}>Upload Bulk Manually</Button>
               <Input.Description my={"md"}>
                 Use this when you want to make a bulk activation manually
-                inputing multiple values
+                inputting multiple values
               </Input.Description>
             </Box>
           )}
@@ -368,7 +419,7 @@ function App() {
               onChange={setValue}
               data={[
                 { label: "Bulk Activation", value: "bulk" },
-                { label: "Single Activation", value: "single" },
+                { label: "Single Activation", value: "single", disabled: true },
               ]}
             />
           </Flex>
