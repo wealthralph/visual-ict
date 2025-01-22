@@ -37,8 +37,8 @@ import axios from "axios";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 
 const axiosClient = axios.create({
-  baseURL: "http://localhost:4000",
-  // baseURL: "https://visual-ict-script.onrender.com",
+  // baseURL: "http://localhost:4000",
+  baseURL: "https://visual-ict-script.onrender.com",
 });
 
 function Admin() {
