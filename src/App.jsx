@@ -20,7 +20,6 @@ import {
 } from "@mantine/core";
 import "./App.css";
 import { useEffect, useState } from "react";
-import PropTypes from "prop-types";
 import { Dropzone, MIME_TYPES } from "@mantine/dropzone";
 import {
   IconEdit,
@@ -41,10 +40,12 @@ const axiosClient = axios.create({
 
 function Single() {}
 
-function BulkModal({ opened, close, setTableData }) {
+function BulkModal({ opened, close, setTableData, onSubmit }) {
   const {
     control,
     handleSubmit,
+
+    formState: { errors },
   } = useForm({
     defaultValues: {
       activate: [{ accountNumber: "", pin: 0 }],
@@ -63,15 +64,14 @@ function BulkModal({ opened, close, setTableData }) {
   const handleFormSubmit = (data) => {
     console.log(data, "data from form submit");
     if (data.activate) {
-      setTableData((prevData) => [...prevData,...data.activate]);
+      setTableData((prevData) => [...prevData, ...data.activate]);
     }
     close();
   };
 
   useEffect(() => {
-      replace([{ accountNumber: "", pin: 0 }]);
-
-  },[])
+    replace([{ accountNumber: "", pin: 0 }]);
+  }, []);
 
   return (
     <Modal
@@ -156,7 +156,6 @@ function Bulk() {
   const [processingTableData, setProcessingTableData] = useState([]);
   const [fileName, setFileName] = useState(null);
 
-  console.log(tableData, "this is the table data");
 
   const handleFileDrop = (files) => {
     const file = files[0];
@@ -192,41 +191,39 @@ function Bulk() {
     setProcessingTableData([]);
   };
 
-  const handleSubmitBulk = async () => {
-    const updatedTableData = [...tableData.slice(0, 15)];
+const handleSubmitBulk = async () => {
+  setIsProcessing(true);
 
-    setIsProcessing(true);
+  const updatedTableData = tableData.map((row) => ({
+    ...row,
+    status: "processing",
+  }));
+  setProcessingTableData(updatedTableData);
 
-    for (let i = 0; i < updatedTableData.length; i++) {
-      const row = updatedTableData[i];
-      updatedTableData[i] = { ...row, status: "processing" };
-      setProcessingTableData([...updatedTableData]);
+  const promises = updatedTableData.map(async (row, i) => {
+    const { accountNumber, pin } = row;
+    const payload = { accountNumber, pin };
 
-      const accountNumber = updatedTableData[i]?.accountNumber;
-      const pin = updatedTableData[i]?.pin;
+    try {
+      const response = await axiosClient.post(`/activate`, payload);
 
-      const payload = {
-        accountNumber,
-        pin
+      if (response.status === 200 && response.data.success) {
+        updatedTableData[i] = { ...row, status: "success" };
+      } else {
+        updatedTableData[i] = { ...row, status: "failed" };
       }
-
-      try {
-        
-        const response = await axiosClient.get("/activate", payload)
-
-        console.log(response.data, "response data")
-        console.log(response.status , 'response status ')
-
-      } catch (error) {
-        console.log(error)
-        updatedTableData[i] = { ...row, status: "failure" };
-      }
-
-      setProcessingTableData([...updatedTableData]);
+    } catch (error) {
+      console.error("Error processing row:", error);
+      updatedTableData[i] = { ...row, status: "failed" };
     }
+  });
 
-    setIsProcessing(false);
-  };
+  await Promise.all(promises);
+
+  setProcessingTableData(updatedTableData);
+  setIsProcessing(false);
+};
+
 
   const handleManualSubmit = (data) => {
     setTableData((prevData) => [...prevData, ...data]);
@@ -245,11 +242,11 @@ function Bulk() {
         setTableData={setTableData}
         onSubmit={handleManualSubmit}
       />
-      <Box w={'100%'}>
-        <Stack w={'100%'}>
+      <Box w={"100%"}>
+        <Stack w={"100%"}>
           {tableData.length > 0 ? (
-            <Box w={'100%'}>
-              <Flex justify="space-between" align="center" gap={"xl"} w={'100%'}>
+            <Box w={"100%"}>
+              <Flex justify="space-between" align="center" gap={"xl"} w={""}>
                 {!fileName ? (
                   <Group gap={"xs"}>
                     <ActionIcon
