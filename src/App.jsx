@@ -17,6 +17,8 @@ import {
   Loader,
   TextInput,
   NumberInput,
+  PinInput,
+  Space,
 } from "@mantine/core";
 import "./App.css";
 import { useEffect, useState } from "react";
@@ -35,8 +37,69 @@ import axios from "axios";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 
 const axiosClient = axios.create({
-  baseURL: "https://visual-ict-script.onrender.com",
+  baseURL: "http://localhost:4000",
+  // baseURL: "https://visual-ict-script.onrender.com",
 });
+
+function Admin() {
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [error, setError] = useState("false");
+
+  const { register, handleSubmit } = useForm();
+
+  async function onAuthorize(data) {
+    const payload = {
+      token: data,
+    };
+
+    try {
+      const response = await axiosClient.post("/verifyPin", payload);
+      if (response.status === 200 && response.data.success) {
+        setIsAuthorized(true);
+      }
+    } catch (error) {
+      setError("Invalid Pin");
+      console.log(error);
+    }
+  }
+
+  async function onSubmit(data) {
+    try {
+      const response = await axiosClient.post("/token", data);
+      if (response.status === 200 && response.data.success) {
+        console.log("Card activated successfully");
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  if (!isAuthorized) {
+    return (
+      <Stack>
+        <PinInput inputMode="numeric" length={4} onComplete={onAuthorize} />
+        <Text c={'red'}>{error || null}</Text>
+      </Stack>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} style={{ width: "100%" }}>
+      <Box w={"100%"}>
+        <TextInput
+          label="Token"
+          placeholder="Enter Token"
+          required
+          {...register("token")}
+        />
+        <Space h={20}/>
+        <Button type="submit" size="xs">
+          Submit
+        </Button>
+      </Box>
+    </form>
+  );
+}
 
 function Single() {}
 
@@ -156,7 +219,6 @@ function Bulk() {
   const [processingTableData, setProcessingTableData] = useState([]);
   const [fileName, setFileName] = useState(null);
 
-
   const handleFileDrop = (files) => {
     const file = files[0];
     if (file) {
@@ -191,39 +253,38 @@ function Bulk() {
     setProcessingTableData([]);
   };
 
-const handleSubmitBulk = async () => {
-  setIsProcessing(true);
+  const handleSubmitBulk = async () => {
+    setIsProcessing(true);
 
-  const updatedTableData = tableData.map((row) => ({
-    ...row,
-    status: "processing",
-  }));
-  setProcessingTableData(updatedTableData);
+    const updatedTableData = tableData.map((row) => ({
+      ...row,
+      status: "processing",
+    }));
+    setProcessingTableData(updatedTableData);
 
-  const promises = updatedTableData.map(async (row, i) => {
-    const { accountNumber, pin } = row;
-    const payload = { accountNumber, pin };
+    const promises = updatedTableData.map(async (row, i) => {
+      const { accountNumber, pin } = row;
+      const payload = { accountNumber, pin };
 
-    try {
-      const response = await axiosClient.post(`/activate`, payload);
+      try {
+        const response = await axiosClient.post(`/activate`, payload);
 
-      if (response.status === 200 && response.data.success) {
-        updatedTableData[i] = { ...row, status: "success" };
-      } else {
+        if (response.status === 200 && response.data.success) {
+          updatedTableData[i] = { ...row, status: "success" };
+        } else {
+          updatedTableData[i] = { ...row, status: "failed" };
+        }
+      } catch (error) {
+        console.error("Error processing row:", error);
         updatedTableData[i] = { ...row, status: "failed" };
       }
-    } catch (error) {
-      console.error("Error processing row:", error);
-      updatedTableData[i] = { ...row, status: "failed" };
-    }
-  });
+    });
 
-  await Promise.all(promises);
+    await Promise.all(promises);
 
-  setProcessingTableData(updatedTableData);
-  setIsProcessing(false);
-};
-
+    setProcessingTableData(updatedTableData);
+    setIsProcessing(false);
+  };
 
   const handleManualSubmit = (data) => {
     setTableData((prevData) => [...prevData, ...data]);
@@ -395,10 +456,13 @@ function App() {
               data={[
                 { label: "Bulk Activation", value: "bulk" },
                 { label: "Single Activation", value: "single", disabled: true },
+                { label: "Admin", value: "admin" },
               ]}
             />
           </Flex>
-          <Box>{value === "bulk" ? <Bulk /> : <Single />}</Box>
+          <Box>{value === "bulk" && <Bulk />}</Box>
+          <Box>{value === "single" && <Single />}</Box>
+          <Box w={"100%"}>{value === "admin" && <Admin />}</Box>
         </Stack>
       </Paper>
     </Stack>
