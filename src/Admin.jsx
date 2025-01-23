@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { axiosClient } from "./axiosClient";
-import { Box, Button, Input, PinInput, Stack, TextInput } from "@mantine/core";
+import {  Button, Input, PinInput, Stack, TextInput } from "@mantine/core";
 import { useMutation } from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
 
