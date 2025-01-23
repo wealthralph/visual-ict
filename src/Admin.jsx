@@ -33,7 +33,7 @@ function Admin() {
 
   const { mutateAsync:tokenMutateAsync, isPending: tokenPending } = useMutation({
     mutationFn: async function (token) {
-      return await axiosClient.post("/token", { token });
+      return await axiosClient.post("/token", token);
     },
     onSuccess: () => {
         setIsAuthorized(true)
