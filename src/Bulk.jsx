@@ -93,11 +93,7 @@ function Bulk() {
       });
     },
     onSuccess: (data, row) => {
-      setTableData((prevData) =>
-        prevData.map((item) =>
-          item.id === row.id ? { ...item, status: "success" } : item
-        )
-      );
+ 
       notifications.show({
         color: "green",
         message: `Card Activated`,
@@ -106,7 +102,7 @@ function Bulk() {
       setTableData((prevData) =>
         prevData.map((item) =>
           item.accountNumber === row.accountNumber
-            ? { ...item, status: "failed" }
+            ? { ...item, status: "success" }
             : item
         )
       );
