@@ -3,7 +3,6 @@ import { useMutation } from "@tanstack/react-query";
 import { Controller, useForm } from "react-hook-form";
 import { axiosClient } from "./axiosClient";
 import { notifications } from "@mantine/notifications";
-import { useState } from "react";
 import { MonthPickerInput } from "@mantine/dates";
 import dayjs from "dayjs";
 
@@ -16,7 +15,7 @@ const Single = () => {
     handleSubmit,
     register,
     control,
-    formState: { errors, isValid },
+    formState: { errors },
     watch,
   } = useForm({
     mode: "onSubmit",
