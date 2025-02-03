@@ -1,6 +1,6 @@
 import Papa from "papaparse";
 import { useDisclosure } from "@mantine/hooks";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Dropzone, MIME_TYPES } from "@mantine/dropzone";
 import {
   ActionIcon,
@@ -10,7 +10,6 @@ import {
   Flex,
   Group,
   Input,
-
   Stack,
   Table,
   Text,
@@ -32,108 +31,156 @@ function Bulk() {
   const [opened, { open, close }] = useDisclosure(false);
   const [tableData, setTableData] = useState([]);
   const [fileName, setFileName] = useState(null);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [validationErrors, setValidationErrors] = useState("");
+   const prevModeRef = useRef();
 
- useEffect(() => {
-   const savedFileName = localStorage.getItem("fileName");
-   const savedTableData = localStorage.getItem("tableData");
-   const savedProcessingTableData = localStorage.getItem("processingTableData");
+              const mode = JSON.parse(localStorage.getItem("mode"));
 
-   if (savedFileName && savedTableData && savedProcessingTableData) {
-     setFileName(savedFileName);
-     setTableData(JSON.parse(savedTableData));
-   }
- }, []);
 
- const handleFileDrop = (files) => {
-   const file = files[0];
-   if (file) {
-     setFileName(file.name);
-     localStorage.setItem("fileName", file.name);
+  useEffect(() => {
+    const savedFileName = localStorage.getItem("fileName");
+    const savedTableData = localStorage.getItem("tableData");
 
-     const reader = new FileReader();
-     reader.onload = function (e) {
-       const csv = e.target.result;
+    if (savedFileName && savedTableData) {
+      setFileName(savedFileName);
+      setTableData(JSON.parse(savedTableData));
+    }
+  }, []);
 
-       // Parse CSV using PapaParse
-       Papa.parse(csv, {
-         header: true,
-         skipEmptyLines: true,
-         complete: function (result) {
-           const initialData = result.data.map((row, index) => ({
-             id: index,
-             ...row,
-             status: "pending",
-           }));
-           setTableData(initialData);
-           localStorage.setItem("tableData", JSON.stringify(initialData));
-           localStorage.setItem(
-             "processingTableData",
-             JSON.stringify(initialData)
-           );
-         },
-       });
-     };
-     reader.readAsText(file);
-   }
- };
+  useEffect(() => {
+    if (prevModeRef.current && prevModeRef.current !== mode) {
+         localStorage.removeItem("fileName");
+         localStorage.removeItem("tableData");
+    }
+    prevModeRef.current = mode;
+  }, [mode]);
+
+  const handleFileDrop = (files) => {
+    const file = files[0];
+    if (file) {
+      setFileName(file.name);
+      setSelectedFile(file);
+
+      localStorage.setItem("fileName", file.name);
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const csv = e.target.result;
+
+        Papa.parse(csv, {
+          header: true,
+          skipEmptyLines: true,
+          complete: function (result) {
+
+
+            if (mode?.label === "Interswitch") {
+              const requiredFields = ["cvv", "expiry", "cardpan", "newPin"];
+              const missingFields = requiredFields.filter(
+                (field) => !result.meta.fields.includes(field)
+              );
+
+              if (missingFields.length > 0) {
+                setValidationErrors(
+                  `Missing required fields: ${missingFields.join(", ")}`
+                );
+                notifications.show({
+                  message: `Missing required fields: ${missingFields.join(
+                    ", "
+                  )}`,
+                  color: "red",
+                });
+                return;
+              }
+            }
+
+            const initialData = result.data.map((row, index) => {
+              return {
+                id: index + 1,
+                ...row,
+                status: "pending",
+              };
+            });
+
+            setTableData(initialData);
+            localStorage.setItem("tableData", JSON.stringify(initialData));
+          },
+        });
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  const { isPending, mutateAsync } = useMutation({
+    mutationFn: async function () {
+      if (!selectedFile) {
+        notifications.show({ message: "No file selected", color: "red" });
+        return;
+      }
+
+      console.log(selectedFile, "selected file");
+
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+
+      return await axiosClient.post(`/activate-bulk?mode=${mode?.label}`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+    },
+    onSuccess: (data) => {
+      console.log(data, "📌 Processed Response");
+
+      const { processedRecords, failedRecords } = data.data;
+
+      setTableData((prevTableData) => {
+        return prevTableData.map((row) => {
+          const successRow = processedRecords.find(
+            (item) => item.accountNumber === row.accountNumber
+          );
+
+          if (successRow) {
+            return { ...row, status: "success" };
+          }
+
+          const failedRow = failedRecords.find(
+            (item) => item.accountNumber === row.accountNumber
+          );
+
+          if (failedRow) {
+            return { ...row, status: "failed", error: failedRow.message };
+          }
+
+          return row; // Return unchanged row if not found
+        });
+      });
+
+      localStorage.setItem("tableData", JSON.stringify(tableData));
+
+      notifications.show({
+        message: `CSV processed: ${processedRecords.length} success, ${failedRecords.length} failed.`,
+        color: processedRecords.length > 0 ? "green" : "red",
+      });
+    },
+    onError: () => {
+      notifications.show({ message: "Failed to upload CSV", color: "red" });
+    },
+  });
+
+  const handleSubmitBulk = async () => {
+    await mutateAsync();
+  };
+
+  const handleManualSubmit = (data) => {
+    setTableData((prevData) => [...prevData, ...data]);
+  };
 
   const clearFile = () => {
     setFileName(null);
     setTableData([]);
     localStorage.removeItem("fileName");
     localStorage.removeItem("tableData");
-    localStorage.removeItem("processingTableData");
   };
 
-  const { isPending, mutateAsync } = useMutation({
-    mutationFn: async function (row) {
-      return await axiosClient.post("/activate", {
-        accountNumber: row.accountNumber,
-        pin: row.pin,
-      });
-    },
-    onSuccess: (data, row) => {
- 
-      notifications.show({
-        color: "green",
-        message: `Card Activated`,
-      });
-
-      setTableData((prevData) =>
-        prevData.map((item) =>
-          item.accountNumber === row.accountNumber
-            ? { ...item, status: "success" }
-            : item
-        )
-      );
-    },
-    onError: (error, row) => {
-      notifications.show({
-        message: `Failed to activate card with ${row.accountNumber} and ${row.pin}`,
-        color: "red",
-      });
-
-      console.log(row.id);
-
-      setTableData((prevData) =>
-        prevData.map((item) =>
-          item.accountNumber === row.accountNumber
-            ? { ...item, status: "failed" }
-            : item
-        )
-      );
-    },
-  });
-
-  const handleSubmitBulk = async () => {
-    for (const row of tableData) {
-      mutateAsync(row);
-    }
-  };
-
-  const handleManualSubmit = (data) => {
-    setTableData((prevData) => [...prevData, ...data]);
-  };
 
   return (
     <>
@@ -177,11 +224,12 @@ function Bulk() {
                     onClick={clearFile}
                     title="Clear file"
                     disabled={isPending}
+                    size={"sm"}
                   >
-                    <IconTrash size={18} />
+                    <IconTrash size={16} />
                   </ActionIcon>
                   <Button
-                    size="xs"
+                    size="compact-xs"
                     disabled={isPending}
                     onClick={handleSubmitBulk}
                     loading={isPending}
