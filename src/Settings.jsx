@@ -11,6 +11,7 @@ import {
 } from "@mantine/core";
 import { useEffect, useState } from "react";
 import classes from "./App.module.css";
+import Admin from "./Admin";
 
 const data = [
   {
@@ -85,15 +86,13 @@ const Settings = () => {
           </Box>
           <Switch
             checked={config.retry_failed}
-            
             onChange={(event) => {
-
-                console.log(event.currentTarget.value, "current traget")
-                console.log(event.target.checked, "target")
+              console.log(event.currentTarget.value, "current traget");
+              console.log(event.target.checked, "target");
               setConfig((prevConfig) => {
                 return {
-                    ...prevConfig,
-                    retry_failed: event.target?.checked,
+                  ...prevConfig,
+                  retry_failed: event.target?.checked,
                 };
               });
             }}
@@ -167,6 +166,12 @@ const Settings = () => {
             }}
           />
         </Flex>
+      </Stack>
+      <Stack>
+        <Divider labelPosition="left" label={"Admin Settings"} />
+
+       
+        <Admin />
       </Stack>
     </Stack>
   );

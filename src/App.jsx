@@ -13,7 +13,6 @@ import {
 } from "@mantine/core";
 import { useEffect, useState } from "react";
 
-import Admin from "./Admin";
 import Bulk from "./Bulk";
 import Single from "./Single";
 import { IconSettings } from "@tabler/icons-react";
