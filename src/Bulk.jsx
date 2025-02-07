@@ -4,19 +4,25 @@ import { useRef, useState } from "react";
 import { Dropzone, MIME_TYPES } from "@mantine/dropzone";
 import {
   ActionIcon,
+  Alert,
   Badge,
   Box,
   Button,
+  Combobox,
   Flex,
   Group,
   Input,
+  Pagination,
+  Select,
   Stack,
   Table,
   Text,
+  useCombobox,
 } from "@mantine/core";
 import {
   IconEdit,
   IconFileTypeCsv,
+  IconInfoCircle,
   IconTrash,
   IconUpload,
   IconX,
@@ -33,10 +39,30 @@ function Bulk() {
   const [fileName, setFileName] = useState(null);
   const [selectedFile, setSelectedFile] = useState(null);
   const [validationErrors, setValidationErrors] = useState("");
-   const prevModeRef = useRef();
+  const [activePage, setPage] = useState(1);
+  const [isChunked, setIsChunked] = useState(false);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const prevModeRef = useRef();
 
-              const mode = JSON.parse(localStorage.getItem("mode"));
+  const paginatedData = isChunked
+    ? tableData[activePage - 1]
+    : tableData.slice(
+        (activePage - 1) * itemsPerPage,
+        activePage * itemsPerPage
+      );
 
+  const totalItems = isChunked ? tableData.flat().length : tableData.length;
+  const startItem = itemsPerPage * (activePage - 1) + 1;
+  const endItem = Math.min(totalItems, itemsPerPage * activePage);
+
+  const message = `Showing ${startItem} – ${endItem} of ${totalItems}`;
+
+  const handlePageChange = (page) => {
+    setPage(page);
+  };
+
+  const mode = localStorage.getItem("mode");
+  const config = JSON.parse(localStorage.getItem("config"));
 
   useEffect(() => {
     const savedFileName = localStorage.getItem("fileName");
@@ -44,17 +70,26 @@ function Bulk() {
 
     if (savedFileName && savedTableData) {
       setFileName(savedFileName);
-      setTableData(JSON.parse(savedTableData));
+      // setTableData(JSON.parse(savedTableData));
     }
   }, []);
 
   useEffect(() => {
     if (prevModeRef.current && prevModeRef.current !== mode) {
-         localStorage.removeItem("fileName");
-         localStorage.removeItem("tableData");
+      localStorage.removeItem("fileName");
+      localStorage.removeItem("tableData");
     }
     prevModeRef.current = mode;
   }, [mode]);
+
+  function chunk(array, size) {
+    if (!array.length) {
+      return [];
+    }
+    const head = array.slice(0, size);
+    const tail = array.slice(size);
+    return [head, ...chunk(tail, size)];
+  }
 
   const handleFileDrop = (files) => {
     const file = files[0];
@@ -72,9 +107,7 @@ function Bulk() {
           header: true,
           skipEmptyLines: true,
           complete: function (result) {
-
-
-            if (mode?.label === "Interswitch") {
+            if (mode === "Interswitch") {
               const requiredFields = ["cvv", "expiry", "cardpan", "newPin"];
               const missingFields = requiredFields.filter(
                 (field) => !result.meta.fields.includes(field)
@@ -102,7 +135,15 @@ function Bulk() {
               };
             });
 
-            setTableData(initialData);
+            if (result.data.length > config.csv_data_length) {
+              const chunkedData = chunk(initialData, config.batch_size);
+              setTableData(chunkedData);
+              setIsChunked(true);
+            } else {
+              setTableData(initialData);
+              setIsChunked(false);
+            }
+
             localStorage.setItem("tableData", JSON.stringify(initialData));
           },
         });
@@ -123,9 +164,13 @@ function Bulk() {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      return await axiosClient.post(`/activate-bulk?mode=${mode?.label}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      return await axiosClient.post(
+        `/activate-bulk?mode=${mode}&batchSize=${config.batch_size}&batching=${config.enable}`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
     },
     onSuccess: (data) => {
       console.log(data, "📌 Processed Response");
@@ -147,7 +192,7 @@ function Bulk() {
           );
 
           if (failedRow) {
-            return { ...row, status: "failed", error: failedRow.message };
+            return { ...row, status: "failed" };
           }
 
           return row; // Return unchanged row if not found
@@ -174,13 +219,22 @@ function Bulk() {
     setTableData((prevData) => [...prevData, ...data]);
   };
 
+  const combobox = useCombobox({
+    onDropdownClose: () => combobox.resetSelectedOption(),
+  });
+
+  const options = ["10", "20", "30", "40", "50", "60", "70"].map((item) => (
+    <Combobox.Option value={item} key={item}>
+      {item}
+    </Combobox.Option>
+  ));
+
   const clearFile = () => {
     setFileName(null);
     setTableData([]);
     localStorage.removeItem("fileName");
     localStorage.removeItem("tableData");
   };
-
 
   return (
     <>
@@ -240,6 +294,25 @@ function Bulk() {
               </Flex>
             </Box>
           ) : null}
+
+          {config.enable_data_batching &&
+            totalItems > config.csv_data_length && (
+              <Alert
+                variant="light"
+                p={"xs"}
+                color="green"
+                title="Data batching is enbaled "
+                icon={<IconInfoCircle />}
+                radius={"md"}
+                maw={500}
+                c={"green"}
+              >
+                This means that your data will be processed in smaller chunks to
+                improve performance and reliability. Go to settings to configure
+                data batching settings.
+              </Alert>
+            )}
+
           {!tableData.length && (
             <Dropzone
               onDrop={handleFileDrop}
@@ -297,59 +370,109 @@ function Bulk() {
             </Box>
           )}
 
-          {tableData.length > 0 && (
-            <Table
-              highlightOnHover
-              mt="md"
-              striped
-              withTableBorder
-              withColumnBorders
-            >
-              <Table.Thead>
-                <Table.Tr>
-                  {Object.keys(tableData[0]).map((key) => (
-                    <Table.Th key={key}>{key}</Table.Th>
-                  ))}
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {tableData.map((row, index) => (
-                  <Table.Tr key={index}>
-                    {Object.values(row).map((value, idx) => {
-                      switch (value) {
-                        case "pending":
-                          return (
-                            <Table.Td key={idx}>
-                              <Badge color="yellow" size="xs" radius={"sm"}>
-                                pending
-                              </Badge>
-                            </Table.Td>
-                          );
-                        case "failed":
-                          return (
-                            <Table.Td key={idx}>
-                              <Badge color="red" size="xs" radius={"sm"}>
-                                failed
-                              </Badge>
-                            </Table.Td>
-                          );
-                        case "success":
-                          return (
-                            <Table.Td key={idx}>
-                              <Badge color="green" size="xs" radius={"sm"}>
-                                Success
-                              </Badge>
-                            </Table.Td>
-                          );
-                        default:
-                          return <Table.Td key={idx}>{value}</Table.Td>;
+          <Stack>
+            {Array.isArray(tableData) && tableData.length > 0 && (
+              <Stack>
+                <Table
+                  highlightOnHover
+                  mt="md"
+                  striped
+                  withTableBorder
+                  withColumnBorders
+                >
+                  <Table.Thead>
+                    <Table.Tr>
+                      {Object.keys(
+                        isChunked ? tableData[0][0] : tableData[0]
+                      ).map((key) => (
+                        <Table.Th tt={"capitalize"} key={key}>
+                          {key}
+                        </Table.Th>
+                      ))}
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {paginatedData.map((row, index) => (
+                      <Table.Tr key={index}>
+                        {Object.values(row).map((value, idx) => {
+                          switch (value) {
+                            case "pending":
+                              return (
+                                <Table.Td key={idx}>
+                                  <Badge color="yellow" size="xs" radius={"sm"}>
+                                    pending
+                                  </Badge>
+                                </Table.Td>
+                              );
+                            case "failed":
+                              return (
+                                <Table.Td key={idx}>
+                                  <Badge color="red" size="xs" radius={"sm"}>
+                                    failed
+                                  </Badge>
+                                </Table.Td>
+                              );
+                            case "success":
+                              return (
+                                <Table.Td key={idx}>
+                                  <Badge color="green" size="xs" radius={"sm"}>
+                                    Success
+                                  </Badge>
+                                </Table.Td>
+                              );
+                            default:
+                              return <Table.Td key={idx}>{value}</Table.Td>;
+                          }
+                        })}
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+                <Stack>
+                  <Text size="sm">{message}</Text>
+
+                  <Flex justify={"space-between"} gap={"xl"} align={"baseline"}>
+                    <Combobox
+                      store={combobox}
+                      width={250}
+                      position="bottom-start"
+                      withArrow
+                      onOptionSubmit={(val) => {
+                        setItemsPerPage(Number(val));
+                        combobox.closeDropdown();
+                      }}
+                    >
+                      <Combobox.Target>
+                        <Button
+                          size="compact-sm"
+                          variant="default"
+                          onClick={() => combobox.toggleDropdown()}
+                        >
+                          {itemsPerPage}
+                        </Button>
+                      </Combobox.Target>
+
+                      <Combobox.Dropdown>
+                        <Combobox.Options>{options}</Combobox.Options>
+                      </Combobox.Dropdown>
+                    </Combobox>{" "}
+                    <Pagination
+                      total={
+                        isChunked
+                          ? tableData.length
+                          : Math.ceil(tableData.length / itemsPerPage)
                       }
-                    })}
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          )}
+                      value={activePage}
+                      onChange={handlePageChange}
+                      mt="sm"
+                      size={"sm"}
+                      withEdges
+                    />
+                  </Flex>
+                </Stack>
+              </Stack>
+            )}
+          </Stack>
         </Stack>
       </Box>
     </>

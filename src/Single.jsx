@@ -7,7 +7,7 @@ import { MonthPickerInput } from "@mantine/dates";
 import dayjs from "dayjs";
 
 const Single = () => {
-           const mode = JSON.parse(localStorage.getItem("mode"));
+           const mode = localStorage.getItem("mode");
 
 
 
@@ -54,8 +54,8 @@ const Single = () => {
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
 
-      {mode.label === "Providus" && ProvidusMode(register, errors)}
-      {mode.label === "Interswitch" && InterswitchMode(register, errors, control)}
+      {mode === "Providus" && ProvidusMode(register, errors)}
+      {mode === "Interswitch" && InterswitchMode(register, errors, control)}
       <Space h="lg" />
       <Button type="submit" size="xs" loading={isPending} >
         Activate Card
