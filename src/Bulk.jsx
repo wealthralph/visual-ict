@@ -13,7 +13,6 @@ import {
   Group,
   Input,
   Pagination,
-  Select,
   Stack,
   Table,
   Text,
@@ -64,15 +63,15 @@ function Bulk() {
   const mode = localStorage.getItem("mode");
   const config = JSON.parse(localStorage.getItem("config"));
 
-  useEffect(() => {
-    const savedFileName = localStorage.getItem("fileName");
-    const savedTableData = localStorage.getItem("tableData");
+  // useEffect(() => {
+  //   const savedFileName = localStorage.getItem("fileName");
+  //   const savedTableData = localStorage.getItem("tableData");
 
-    if (savedFileName && savedTableData) {
-      setFileName(savedFileName);
-      // setTableData(JSON.parse(savedTableData));
-    }
-  }, []);
+  //   if (savedFileName && savedTableData) {
+  //     setFileName(savedFileName);
+  //     // setTableData(JSON.parse(savedTableData));
+  //   }
+  // }, []);
 
   useEffect(() => {
     if (prevModeRef.current && prevModeRef.current !== mode) {
@@ -152,14 +151,17 @@ function Bulk() {
     }
   };
 
-  const { isPending, mutateAsync } = useMutation({
+  const {
+    isPending,
+    mutateAsync,
+    data: responseData,
+    isSuccess,
+  } = useMutation({
     mutationFn: async function () {
       if (!selectedFile) {
         notifications.show({ message: "No file selected", color: "red" });
         return;
       }
-
-      console.log(selectedFile, "selected file");
 
       const formData = new FormData();
       formData.append("file", selectedFile);
@@ -174,36 +176,57 @@ function Bulk() {
     },
     onSuccess: (data) => {
       console.log(data, "📌 Processed Response");
-
-      const { processedRecords, failedRecords } = data.data;
+      const { batchResults } = data.data;
 
       setTableData((prevTableData) => {
-        return prevTableData.map((row) => {
-          const successRow = processedRecords.find(
-            (item) => item.accountNumber === row.accountNumber
-          );
+        let updatedTableData = [...prevTableData];
 
-          if (successRow) {
-            return { ...row, status: "success" };
-          }
+        batchResults.forEach((batch) => {
+          const { processedRecords, failedRecords } = batch;
 
-          const failedRow = failedRecords.find(
-            (item) => item.accountNumber === row.accountNumber
-          );
+          processedRecords.forEach((processedRecord) => {
+            updatedTableData = updatedTableData.map((row) => {
+              return row.map((item) => {
+                if (item.accountNumber === processedRecord.accountNumber) {
+                  return { ...item, status: "success" };
+                }
+                return item;
+              });
+            });
+          });
 
-          if (failedRow) {
-            return { ...row, status: "failed" };
-          }
-
-          return row; // Return unchanged row if not found
+          failedRecords.forEach((failedRecord) => {
+            updatedTableData = updatedTableData.map((row) => {
+              return row.map((item) => {
+                if (item.accountNumber === failedRecord.accountNumber) {
+                  return {
+                    ...item,
+                    status: "failed",
+                    error: failedRecord.message,
+                  };
+                }
+                return item;
+              });
+            });
+          });
         });
+
+        return updatedTableData;
       });
 
       localStorage.setItem("tableData", JSON.stringify(tableData));
+      const totalProcessed = batchResults.reduce(
+        (acc, batch) => acc + batch.processedRecords.length,
+        0
+      );
+      const totalFailed = batchResults.reduce(
+        (acc, batch) => acc + batch.failedRecords.length,
+        0
+      );
 
       notifications.show({
-        message: `CSV processed: ${processedRecords.length} success, ${failedRecords.length} failed.`,
-        color: processedRecords.length > 0 ? "green" : "red",
+        message: `CSV processed: ${totalProcessed} success, ${totalFailed} failed.`,
+        color: totalProcessed > 0 ? "green" : "red",
       });
     },
     onError: () => {
@@ -370,12 +393,23 @@ function Bulk() {
             </Box>
           )}
 
-          <Stack>
+          <Stack gap={"xs"}>
+            <Group>
+              {tableData.length && <Text size="xs">Current Batch : </Text>}
+              {isSuccess && responseData?.data && (
+                <Text size="xs">
+                  Total Batches Processed :{" "}
+                  <Text inherit span c={"dimmed"}>
+                    {responseData?.data.totalBatches || 0}{" "}
+                  </Text>
+                </Text>
+              )}
+            </Group>
             {Array.isArray(tableData) && tableData.length > 0 && (
               <Stack>
                 <Table
                   highlightOnHover
-                  mt="md"
+                  // mt="md"
                   striped
                   withTableBorder
                   withColumnBorders
